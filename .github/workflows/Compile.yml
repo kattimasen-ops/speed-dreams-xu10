@@ -37,7 +37,6 @@ jobs:
                 libexpat1-dev \
                 libplib-dev
 
-              # Wir löschen den Ordner osggraph komplett, damit er nicht gebaut werden kann!
               rm -rf src/modules/graphic/osggraph
 
               export CFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -fpermissive -w'
@@ -47,6 +46,7 @@ jobs:
               mkdir -p build && cd build
 
               cmake .. \
+                -Wno-dev \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX=/workspace/dist/ports/speed-dreams \
                 -DOPTION_BUILD_SIMU=ON
