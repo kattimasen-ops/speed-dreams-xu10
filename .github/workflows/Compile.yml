@@ -44,9 +44,10 @@ jobs:
                 sed -i 's/return ;/return value;/' \$ATOMIC_FILE || true
               fi
 
-              # 1. R36S Compiler-Flags (Inklusive Toleranz-Flags für alten Code)
-              export CFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -flto -fpermissive -w'
-              export CXXFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -flto -fpermissive -w'
+              # 1. Optimierte Flags OHNE -flto (verhindert Linker-Abstürze am Ende)
+              export CFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -fpermissive -w'
+              export CXXFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -fpermissive -w'
+              export LDFLAGS='-lGL -lpthread -ldl'
               
               mkdir -p build && cd build
 
@@ -56,11 +57,11 @@ jobs:
                 -DCMAKE_INSTALL_PREFIX=/workspace/dist/ports/speed-dreams \
                 -DOPTION_BUILD_SIMU=ON
 
-              # Volle Power mit 4 Kernen (-j4)
+              # Volle Power mit 4 Kernen
               make -j4
               make install
 
-              # 3. Binaries strippen um Platz und RAM zu sparen
+              # 3. Binaries strippen um Platz zu sparen
               find /workspace/dist/ports/speed-dreams -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
 
               # 4. Benötigte System-Bibliotheken ins Port-Verzeichnis kopieren
@@ -76,13 +77,9 @@ jobs:
         run: |
           mkdir -p dist/ports/speed-dreams
 
-          # Start-Script generieren
           cat << 'EOF' > dist/speed-dreams.sh
           #!/bin/bash
-          # PortMaster Start-Script für Speed Dreams (RK3326 / R36S)
-
           XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
-
           if [ -d "/opt/system/Tools/PortMaster/" ]; then
             controlfolder="/opt/system/Tools/PortMaster"
           elif [ -d "/opt/tools/PortMaster/" ]; then
@@ -90,29 +87,22 @@ jobs:
           else
             controlfolder="/roms/ports/PortMaster"
           fi
-
           source $controlfolder/control.txt
           [ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
-
           GAMEDIR="/$directory/ports/speed-dreams"
           cd "$GAMEDIR"
-
           export LD_LIBRARY_PATH="$GAMEDIR/lib:$LD_LIBRARY_PATH"
           export SD_DATADIR="$GAMEDIR/share/games/speed-dreams-2"
-
           export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
           export SDL_AUDIODRIVER="alsa"
-
           export LIBGL_ES=2
           export LIBGL_GL=21
           export LIBGL_FB=4
           if [ -f "/usr/lib/libgl4es.so" ]; then
               export LD_PRELOAD="/usr/lib/libgl4es.so"
           fi
-
           export HOME="$GAMEDIR"
           export XDG_CONFIG_HOME="$GAMEDIR/conf"
-
           mkdir -p "$XDG_CONFIG_HOME/speed-dreams-2/settings"
           if [ ! -f "$XDG_CONFIG_HOME/speed-dreams-2/settings/screen.xml" ]; then
             cat << 'CFG_EOF' > "$XDG_CONFIG_HOME/speed-dreams-2/settings/screen.xml"
@@ -127,24 +117,18 @@ jobs:
           </params>
           CFG_EOF
           fi
-
           $ESUDO chmod 666 /dev/tty0
           $ESUDO chmod 666 /dev/tty1
           printf "\033c" > /dev/tty1
           printf "\033c" > /dev/tty0
-
           $GPTOKEYB "speed-dreams" -c "./speed-dreams.gptk" &
-
           ./bin/speed-dreams 2>&1 | tee log.txt
-
           $ESUDO kill -9 $(pidof gptokeyb)
           $ESUDO systemctl restart oga_events &
           printf "\033c" > /dev/tty1
           EOF
-
           chmod +x dist/speed-dreams.sh
 
-          # Steuerung (.gptk) generieren
           cat << 'EOF' > dist/ports/speed-dreams/speed-dreams.gptk
           back = esc
           start = enter
