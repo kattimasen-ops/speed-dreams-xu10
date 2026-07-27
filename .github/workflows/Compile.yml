@@ -1,4 +1,4 @@
-name: Build Speed Dreams R36S (ARM64 / PortMaster)
+ name: Build Speed Dreams R36S (ARM64 / PortMaster)
 
 on:
   push:
@@ -34,7 +34,8 @@ jobs:
                 libjpeg-dev libpng-dev libz-dev \
                 libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev \
                 libopenscenegraph-dev \
-                libexpat1-dev
+                libexpat1-dev \
+                libplib-dev
 
               # 1. R36S Compiler-Flags (Optimiert für Cortex-A35)
               export CFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -flto'
