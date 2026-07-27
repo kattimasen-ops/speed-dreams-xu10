@@ -3,8 +3,6 @@ name: Build Speed Dreams R36S (ARM64 / PortMaster)
 on:
   push:
     branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
@@ -16,113 +14,63 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Set up QEMU for ARM64 Emulation
+      # 1. QEMU zwingend installieren, damit ARM64 simuliert werden kann
+      - name: Set up QEMU for ARM64
         uses: docker/setup-qemu-action@v3
 
-      - name: Build Speed Dreams in ARM64 Ubuntu Container
+      # 2. Build im Docker-Container (mit explizitem Platform-Tag)
+      - name: Build in ARM64 Docker Container
         run: |
           docker run --rm --privileged \
+            --platform linux/arm64 \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
-            arm64v8/ubuntu:20.04 /bin/bash -c "
+            ubuntu:20.04 /bin/bash -c "
               export DEBIAN_FRONTEND=noninteractive
               apt-get update && apt-get install -y \
-                build-essential \
-                cmake \
-                git \
-                zip \
-                libsdl2-dev \
-                libsdl2-image-dev \
-                libopenal-dev \
-                libvorbis-dev \
-                libogg-dev \
-                libenet-dev \
-                libxerces-c-dev \
-                libjpeg-dev \
-                libpng-dev \
-                libgles1-mesa-dev \
-                libgles2-mesa-dev \
-                libegl1-mesa-dev \
-                freeglut3-dev \
-                zlib1g-dev
+                build-essential cmake git zip \
+                libsdl2-dev libsdl2-image-dev \
+                libopenal-dev libvorbis-dev libogg-dev \
+                libenet-dev libxerces-c-dev \
+                libjpeg-dev libpng-dev libz-dev \
+                libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev
 
-              # R36S (RK3326 Cortex-A35) spezifische Performance-Flags
+              # R36S (RK3326) spezifische Compiler-Flags
               export CFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -flto'
               export CXXFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -flto'
-              export LDFLAGS='-flto -Wl,--as-needed'
-
-              # Build-Ordner vorbereiten
+              
               mkdir -p build && cd build
 
-              # CMake Konfiguration für GLES / R36S
+              # CMake: Wir kompilieren gegen Standard OpenGL, da wir zur Laufzeit GL4ES nutzen
               cmake .. \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX=/workspace/dist/ports/speed-dreams \
-                -DOPTION_BUILD_SIMU=ON \
-                -DOPTION_BUILD_PLAYERS=ON
+                -DOPTION_BUILD_SIMU=ON
 
               make -j\$(nproc)
               make install
 
-              # Strippen der Binaries & Libs zur Reduzierung der Dateigröße
+              # Binaries strippen um Platz zu sparen
               find /workspace/dist/ports/speed-dreams -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
           "
 
-      - name: Prepare PortMaster Package Structure
+      # 3. PortMaster Scripte und Konfigurationen generieren
+      - name: Create PortMaster Scripts & Mapping
         run: |
           mkdir -p dist/ports/speed-dreams
+          
+          # Kopiere das Startscript aus dem Repo (legen wir gleich an)
+          cp portmaster_files/speed-dreams.sh dist/
+          cp portmaster_files/speed-dreams.gptk dist/ports/speed-dreams/
 
-          # Erstelle das PortMaster Starter Script (.sh)
-          cat << 'EOF' > dist/speed-dreams.sh
-          #!/bin/bash
-          # PortMaster Starter Script for Speed Dreams (R36S)
-
-          XDG_DATA_HOME="$HOME/.local/share"
-          export PORTDIR="/gamedata/ports"
-          export GAMEDIR="$PORTDIR/speed-dreams"
-
-          cd "$GAMEDIR"
-
-          # Library-Pfade setzen
-          export LD_LIBRARY_PATH="$GAMEDIR/lib:$GAMEDIR/lib/speed-dreams:$LD_LIBRARY_PATH"
-
-          # gptokeyb Steuerung starten (Mappt Handheld-Tasten)
-          $GPTOKEYB "speed-dreams" -c "./speed-dreams.gptk" &
-
-          # Spiel starten
-          ./bin/speed-dreams 2>&1 | tee log.txt
-
-          # Aufräumen nach Beenden
-          killall -9 gptokeyb
-          EOF
-
-          chmod +x dist/speed-dreams.sh
-
-          # Erstelle Standard Controller GPTK-Mapping
-          cat << 'EOF' > dist/ports/speed-dreams/speed-dreams.gptk
-          back = esc
-          start = enter
-          a = space
-          b = c
-          x = r
-          y = v
-          up = up
-          down = down
-          left = left
-          right = right
-          left_analog_up = up
-          left_analog_down = down
-          left_analog_left = left
-          left_analog_right = right
-          EOF
-
+      # 4. ZIP-Archiv erstellen
       - name: Package Artifacts into ZIP
         run: |
           cd dist
-          zip -r ../speed-dreams-r36s-arm64.zip ports/ speed-dreams.sh
+          zip -r ../speed-dreams-r36s.zip speed-dreams.sh ports/
 
       - name: Upload PortMaster ZIP File
         uses: actions/upload-artifact@v4
         with:
           name: speed-dreams-r36s
-          path: speed-dreams-r36s-arm64.zip
+          path: speed-dreams-r36s.zip
