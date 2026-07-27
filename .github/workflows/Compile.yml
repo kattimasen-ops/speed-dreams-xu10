@@ -37,7 +37,6 @@ jobs:
                 libexpat1-dev \
                 libplib-dev
 
-              # Fix für OsgAtomic.h
               ATOMIC_FILE=\"src/modules/graphic/osggraph/Utils/OsgAtomic.h\"
               if [ -f \"\$ATOMIC_FILE\" ]; then
                 sed -i 's/--value;/--value; return value;/' \$ATOMIC_FILE || true
@@ -53,10 +52,10 @@ jobs:
               cmake .. \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX=/workspace/dist/ports/speed-dreams \
-                -DOPTION_BUILD_SIMU=ON
+                -DOPTION_BUILD_SIMU=ON \
+                -DOPTION_BUILD_OSG=OFF
 
-              # VERBOSE=1 druckt alle Befehle ab, um den Fehler exakt zu entlarven
-              make VERBOSE=1 -j4
+              make -j4
               make install
 
               find /workspace/dist/ports/speed-dreams -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
