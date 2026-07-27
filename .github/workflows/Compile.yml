@@ -37,11 +37,8 @@ jobs:
                 libexpat1-dev \
                 libplib-dev
 
-              ATOMIC_FILE=\"src/modules/graphic/osggraph/Utils/OsgAtomic.h\"
-              if [ -f \"\$ATOMIC_FILE\" ]; then
-                sed -i 's/--value;/--value; return value;/' \$ATOMIC_FILE || true
-                sed -i 's/return ;/return value;/' \$ATOMIC_FILE || true
-              fi
+              # Wir löschen den Ordner osggraph komplett, damit er nicht gebaut werden kann!
+              rm -rf src/modules/graphic/osggraph
 
               export CFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -fpermissive -w'
               export CXXFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -fpermissive -w'
@@ -52,8 +49,7 @@ jobs:
               cmake .. \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX=/workspace/dist/ports/speed-dreams \
-                -DOPTION_BUILD_SIMU=ON \
-                -DOPTION_BUILD_OSG=OFF
+                -DOPTION_BUILD_SIMU=ON
 
               make -j4
               make install
