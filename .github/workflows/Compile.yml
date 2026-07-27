@@ -1,4 +1,4 @@
- name: Build Speed Dreams R36S (ARM64 / PortMaster)
+name: Build Speed Dreams R36S (ARM64 / PortMaster)
 
 on:
   push:
