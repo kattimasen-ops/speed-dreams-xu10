@@ -27,7 +27,7 @@ jobs:
               set -e
               export DEBIAN_FRONTEND=noninteractive
               
-              # 1. Alle Pakete inkl. OpenSceneGraph-Entwicklungsbibliotheken (wichtig für CMake-Check!)
+              # 1. Alle Pakete inklusive OpenSceneGraph-Abhängigkeiten für den CMake-Check
               apt-get update && apt-get install -y \
                 build-essential cmake git zip \
                 libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
@@ -39,32 +39,29 @@ jobs:
                 libexpat1-dev libplib-dev \
                 libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev
 
-              # 2. osggraph physisch löschen, damit CMake keine Build-Regeln dafür baut
-              rm -rf src/modules/graphic/osggraph
-
-              # 3. Optimierungs-Flags für den Cortex-A35 (RK3326)
+              # 2. Aggressive Optimierungs-Flags für den Cortex-A35 (RK3326)
               export CFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -fpermissive -w'
               export CXXFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -fpermissive -w'
               export LDFLAGS='-lGL -lGLU -lX11 -lXext -lpthread -ldl'
               
               mkdir -p build && cd build
 
-              # 4. CMake-Durchlauf (find_package läuft jetzt dank installierter Dev-Pakete fehlerfrei durch)
+              # 3. Korrekte CMake-Konfiguration mit dem offiziellen Flag OPTION_OSGGRAPH=OFF
               cmake .. \
                 -Wno-dev \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX=/workspace/dist/ports/speed-dreams \
                 -DOPTION_BUILD_SIMU=ON \
-                -DOPTION_BUILD_OSG=OFF
+                -DOPTION_OSGGRAPH=OFF
 
-              # 5. Kompilieren und Installieren
+              # 4. Kompilieren und Installieren
               make -j4
               make install
 
               # Binaries komprimieren
               find /workspace/dist/ports/speed-dreams -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
 
-              # 6. Laufzeit-Bibliotheken kopieren
+              # 5. Laufzeit-Bibliotheken kopieren
               mkdir -p /workspace/dist/ports/speed-dreams/lib
               cp -P /usr/lib/aarch64-linux-gnu/libenet.so* /workspace/dist/ports/speed-dreams/lib/ 2>/dev/null || true
               cp -P /usr/lib/aarch64-linux-gnu/libxerces-c*.so* /workspace/dist/ports/speed-dreams/lib/ 2>/dev/null || true
@@ -90,7 +87,7 @@ jobs:
           GAMEDIR="/$directory/ports/speed-dreams"
           cd "$GAMEDIR"
           
-          # CPU-Governor auf 'performance' für maximale Leistung auf dem RK3326
+          # CPU-Governor auf 'performance' schalten für maximale Leistung auf dem RK3326
           if [ -f "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor" ]; then
               echo "performance" | $ESUDO tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
           fi
@@ -100,7 +97,7 @@ jobs:
           export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
           export SDL_AUDIODRIVER="alsa"
           
-          # gl4es Optimierungen für Mali-GPU
+          # gl4es Optimierungen für die Mali-GPU
           export LIBGL_ES=2
           export LIBGL_GL=21
           export LIBGL_FB=4
