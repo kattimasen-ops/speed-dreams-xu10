@@ -27,7 +27,7 @@ jobs:
               set -e
               export DEBIAN_FRONTEND=noninteractive
               
-              # 1. Vollständige Installation aller benötigten Entwicklungs- und Grafik-Pakete
+              # 1. Alle Pakete inkl. OpenSceneGraph-Entwicklungsbibliotheken (wichtig für CMake-Check!)
               apt-get update && apt-get install -y \
                 build-essential cmake git zip \
                 libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
@@ -35,21 +35,21 @@ jobs:
                 libenet-dev libxerces-c-dev \
                 libjpeg-dev libpng-dev libz-dev \
                 libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev \
+                libopenscenegraph-dev libopenthreads-dev \
                 libexpat1-dev libplib-dev \
                 libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev
 
-              # 2. Das fehleranfällige osggraph-Modul vorab physisch entfernen, 
-              # damit CMake stabil über das fehlerfreie ssggraph-Modul läuft.
+              # 2. osggraph physisch löschen, damit CMake keine Build-Regeln dafür baut
               rm -rf src/modules/graphic/osggraph
 
-              # 3. Aggressive Optimierungs- und Toleranz-Flags für den R36S Cortex-A35 Prozessor
+              # 3. Optimierungs-Flags für den Cortex-A35 (RK3326)
               export CFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -fpermissive -w'
               export CXXFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -fpermissive -w'
               export LDFLAGS='-lGL -lGLU -lX11 -lXext -lpthread -ldl'
               
               mkdir -p build && cd build
 
-              # 4. Saubere CMake-Konfiguration
+              # 4. CMake-Durchlauf (find_package läuft jetzt dank installierter Dev-Pakete fehlerfrei durch)
               cmake .. \
                 -Wno-dev \
                 -DCMAKE_BUILD_TYPE=Release \
@@ -61,10 +61,10 @@ jobs:
               make -j4
               make install
 
-              # Binaries komprimieren, um Speicherplatz zu sparen
+              # Binaries komprimieren
               find /workspace/dist/ports/speed-dreams -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
 
-              # 6. Notwendige Laufzeit-Bibliotheken ins Zielverzeichnis kopieren
+              # 6. Laufzeit-Bibliotheken kopieren
               mkdir -p /workspace/dist/ports/speed-dreams/lib
               cp -P /usr/lib/aarch64-linux-gnu/libenet.so* /workspace/dist/ports/speed-dreams/lib/ 2>/dev/null || true
               cp -P /usr/lib/aarch64-linux-gnu/libxerces-c*.so* /workspace/dist/ports/speed-dreams/lib/ 2>/dev/null || true
@@ -89,19 +89,32 @@ jobs:
           [ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
           GAMEDIR="/$directory/ports/speed-dreams"
           cd "$GAMEDIR"
+          
+          # CPU-Governor auf 'performance' für maximale Leistung auf dem RK3326
+          if [ -f "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor" ]; then
+              echo "performance" | $ESUDO tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
+          fi
+
           export LD_LIBRARY_PATH="$GAMEDIR/lib:$LD_LIBRARY_PATH"
           export SD_DATADIR="$GAMEDIR/share/games/speed-dreams-2"
           export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
           export SDL_AUDIODRIVER="alsa"
+          
+          # gl4es Optimierungen für Mali-GPU
           export LIBGL_ES=2
           export LIBGL_GL=21
           export LIBGL_FB=4
+          export LIBGL_VSYNC=0
+          export LIBGL_RECYCLEFBO=1
+          
           if [ -f "/usr/lib/libgl4es.so" ]; then
               export LD_PRELOAD="/usr/lib/libgl4es.so"
           fi
+          
           export HOME="$GAMEDIR"
           export XDG_CONFIG_HOME="$GAMEDIR/conf"
           mkdir -p "$XDG_CONFIG_HOME/speed-dreams-2/settings"
+          
           if [ ! -f "$XDG_CONFIG_HOME/speed-dreams-2/settings/screen.xml" ]; then
             cat << 'CFG_EOF' > "$XDG_CONFIG_HOME/speed-dreams-2/settings/screen.xml"
           <?xml version="1.0" encoding="UTF-8"?>
@@ -115,13 +128,21 @@ jobs:
           </params>
           CFG_EOF
           fi
+
           $ESUDO chmod 666 /dev/tty0
           $ESUDO chmod 666 /dev/tty1
           printf "\033c" > /dev/tty1
           printf "\033c" > /dev/tty0
+          
           $GPTOKEYB "speed-dreams" -c "./speed-dreams.gptk" &
           ./bin/speed-dreams 2>&1 | tee log.txt
+          
           $ESUDO kill -9 $(pidof gptokeyb)
+          
+          if [ -f "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor" ]; then
+              echo "ondemand" | $ESUDO tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
+          fi
+
           $ESUDO systemctl restart oga_events &
           printf "\033c" > /dev/tty1
           EOF
