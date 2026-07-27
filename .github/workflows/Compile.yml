@@ -49,7 +49,8 @@ jobs:
                 -DCMAKE_INSTALL_PREFIX=/workspace/dist/ports/speed-dreams \
                 -DOPTION_BUILD_SIMU=ON
 
-              make -j\$(nproc)
+              # Kompilierung mit Single-Core (-j1) und Fehlerfang, um den genauen Grund zu sehen
+              make -j1 || exit 1
               make install
 
               # 3. Binaries strippen um Platz und RAM zu sparen
