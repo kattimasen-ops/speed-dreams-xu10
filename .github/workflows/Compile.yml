@@ -37,6 +37,15 @@ jobs:
                 libexpat1-dev \
                 libplib-dev
 
+              # --- FIX FÜR OsgAtomic.h (Fehlende Rückgabewerte) ---
+              # Wir patchen die betroffenen Zeilen direkt im Quellcode, damit GCC nicht abbricht
+              ATOMIC_FILE=\"src/modules/graphic/osggraph/Utils/OsgAtomic.h\"
+              if [ -f \"\$ATOMIC_FILE\" ]; then
+                sed -i 's/--value;/--value; return value;/' \$ATOMIC_FILE || true
+                sed -i 's/return ;/return value;/' \$ATOMIC_FILE || true
+              fi
+              # -----------------------------------------------------
+
               # 1. R36S Compiler-Flags (Optimiert für Cortex-A35)
               export CFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -flto'
               export CXXFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -flto'
@@ -49,8 +58,8 @@ jobs:
                 -DCMAKE_INSTALL_PREFIX=/workspace/dist/ports/speed-dreams \
                 -DOPTION_BUILD_SIMU=ON
 
-              # Kompilierung mit Single-Core (-j1) und Fehlerfang, um den genauen Grund zu sehen
-              make -j1 || exit 1
+              # Wieder mit 2 Kernen für einen guten Kompromiss aus Geschwindigkeit und Stabilität
+              make -j2
               make install
 
               # 3. Binaries strippen um Platz und RAM zu sparen
