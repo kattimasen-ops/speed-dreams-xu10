@@ -1,176 +1,31 @@
-name: Build Speed Dreams R36S (ARM64 / PortMaster)
+name: Build Speed Dreams Port
 
 on:
   push:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
-  build-arm64:
+  build-port:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
-      - name: Checkout Repository
+      - name: Repository auschecken
         uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
 
-      - name: Set up QEMU for ARM64
-        uses: docker/setup-qemu-action@v3
-
-      - name: Build in ARM64 Docker Container
-        run: |
-          docker run --rm --privileged \
-            --platform linux/arm64 \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            ubuntu:20.04 /bin/bash -c "
-              set -e
-              export DEBIAN_FRONTEND=noninteractive
-              
-              # 1. Alle Pakete inklusive OpenSceneGraph-Abhängigkeiten für den CMake-Check
-              apt-get update && apt-get install -y \
-                build-essential cmake git zip \
-                libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
-                libopenal-dev libvorbis-dev libogg-dev \
-                libenet-dev libxerces-c-dev \
-                libjpeg-dev libpng-dev libz-dev \
-                libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev \
-                libopenscenegraph-dev libopenthreads-dev \
-                libexpat1-dev libplib-dev \
-                libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev
-
-              # 2. Aggressive Optimierungs-Flags für den Cortex-A35 (RK3326)
-              export CFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -fpermissive -w'
-              export CXXFLAGS='-mcpu=cortex-a35+crypto+fp16 -mtune=cortex-a35 -march=armv8-a+crc+simd -O3 -ffast-math -fpermissive -w'
-              export LDFLAGS='-lGL -lGLU -lX11 -lXext -lpthread -ldl'
-              
-              mkdir -p build && cd build
-
-              # 3. Korrekte CMake-Konfiguration mit dem offiziellen Flag OPTION_OSGGRAPH=OFF
-              cmake .. \
-                -Wno-dev \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_INSTALL_PREFIX=/workspace/dist/ports/speed-dreams \
-                -DOPTION_BUILD_SIMU=ON \
-                -DOPTION_OSGGRAPH=OFF
-
-              # 4. Kompilieren und Installieren
-              make -j4
-              make install
-
-              # Binaries komprimieren
-              find /workspace/dist/ports/speed-dreams -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
-
-              # 5. Laufzeit-Bibliotheken kopieren
-              mkdir -p /workspace/dist/ports/speed-dreams/lib
-              cp -P /usr/lib/aarch64-linux-gnu/libenet.so* /workspace/dist/ports/speed-dreams/lib/ 2>/dev/null || true
-              cp -P /usr/lib/aarch64-linux-gnu/libxerces-c*.so* /workspace/dist/ports/speed-dreams/lib/ 2>/dev/null || true
-              cp -P /usr/lib/aarch64-linux-gnu/libexpat.so* /workspace/dist/ports/speed-dreams/lib/ 2>/dev/null || true
-          "
-
-      - name: Auto-Generate PortMaster Scripts & Mapping
+      - name: Verzeichnisse erstellen
         run: |
           mkdir -p dist/ports/speed-dreams
 
-          cat << 'EOF' > dist/speed-dreams.sh
-          #!/bin/bash
-          XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
-          if [ -d "/opt/system/Tools/PortMaster/" ]; then
-            controlfolder="/opt/system/Tools/PortMaster"
-          elif [ -d "/opt/tools/PortMaster/" ]; then
-            controlfolder="/opt/tools/PortMaster"
-          else
-            controlfolder="/roms/ports/PortMaster"
-          fi
-          source $controlfolder/control.txt
-          [ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
-          GAMEDIR="/$directory/ports/speed-dreams"
-          cd "$GAMEDIR"
-          
-          # CPU-Governor auf 'performance' schalten für maximale Leistung auf dem RK3326
-          if [ -f "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor" ]; then
-              echo "performance" | $ESUDO tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
-          fi
-
-          export LD_LIBRARY_PATH="$GAMEDIR/lib:$LD_LIBRARY_PATH"
-          export SD_DATADIR="$GAMEDIR/share/games/speed-dreams-2"
-          export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
-          export SDL_AUDIODRIVER="alsa"
-          
-          # gl4es Optimierungen für die Mali-GPU
-          export LIBGL_ES=2
-          export LIBGL_GL=21
-          export LIBGL_FB=4
-          export LIBGL_VSYNC=0
-          export LIBGL_RECYCLEFBO=1
-          
-          if [ -f "/usr/lib/libgl4es.so" ]; then
-              export LD_PRELOAD="/usr/lib/libgl4es.so"
-          fi
-          
-          export HOME="$GAMEDIR"
-          export XDG_CONFIG_HOME="$GAMEDIR/conf"
-          mkdir -p "$XDG_CONFIG_HOME/speed-dreams-2/settings"
-          
-          if [ ! -f "$XDG_CONFIG_HOME/speed-dreams-2/settings/screen.xml" ]; then
-            cat << 'CFG_EOF' > "$XDG_CONFIG_HOME/speed-dreams-2/settings/screen.xml"
-          <?xml version="1.0" encoding="UTF-8"?>
-          <params>
-            <section name="Screen">
-              <attnum name="width" val="640"/>
-              <attnum name="height" val="480"/>
-              <attnum name="depth" val="16"/>
-              <attstr name="window mode" val="fullscreen"/>
-            </section>
-          </params>
-          CFG_EOF
-          fi
-
-          $ESUDO chmod 666 /dev/tty0
-          $ESUDO chmod 666 /dev/tty1
-          printf "\033c" > /dev/tty1
-          printf "\033c" > /dev/tty0
-          
-          $GPTOKEYB "speed-dreams" -c "./speed-dreams.gptk" &
-          ./bin/speed-dreams 2>&1 | tee log.txt
-          
-          $ESUDO kill -9 $(pidof gptokeyb)
-          
-          if [ -f "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor" ]; then
-              echo "ondemand" | $ESUDO tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null
-          fi
-
-          $ESUDO systemctl restart oga_events &
-          printf "\033c" > /dev/tty1
-          EOF
-          chmod +x dist/speed-dreams.sh
-
-          cat << 'EOF' > dist/ports/speed-dreams/speed-dreams.gptk
-          back = esc
-          start = enter
-          a = up
-          b = down
-          x = space
-          y = c
-          l1 = v
-          r1 = b
-          up = up
-          down = down
-          left = left
-          right = right
-          left_analog_up = up
-          left_analog_down = down
-          left_analog_left = left
-          left_analog_right = right
-          EOF
-
-      - name: Package Artifacts into ZIP
+      - name: Ausführungsrechte vergeben und Skript starten
         run: |
-          cd dist
-          zip -r ../speed-dreams-r36s.zip speed-dreams.sh ports/
+          chmod +x dist/speed-dreams.sh
+          ./dist/speed-dreams.sh
 
-      - name: Upload PortMaster ZIP File
+      - name: Artefakte hochladen
         uses: actions/upload-artifact@v4
         with:
           name: speed-dreams-r36s
-          path: speed-dreams-r36s.zip
+          path: dist/
