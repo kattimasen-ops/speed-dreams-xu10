@@ -23,7 +23,7 @@ jobs:
             --platform linux/arm64 \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
-            ubuntu:18.04 /bin/bash -c "
+            ubuntu:20.04 /bin/bash -c "
               set -e
               export DEBIAN_FRONTEND=noninteractive
               
@@ -57,27 +57,10 @@ jobs:
 
               find /workspace/dist/ports/speed-dreams -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
 
-              # Fehlende Bibliotheken (inkl. libGLU) für den R36S ins lib-Verzeichnis packen
               mkdir -p /workspace/dist/ports/speed-dreams/lib
-              cp -P /usr/lib/aarch64-linux-gnu/libGLU.so* /workspace/dist/ports/speed-dreams/lib/ 2>/dev/null || true
               cp -P /usr/lib/aarch64-linux-gnu/libenet.so* /workspace/dist/ports/speed-dreams/lib/ 2>/dev/null || true
               cp -P /usr/lib/aarch64-linux-gnu/libxerces-c*.so* /workspace/dist/ports/speed-dreams/lib/ 2>/dev/null || true
               cp -P /usr/lib/aarch64-linux-gnu/libexpat.so* /workspace/dist/ports/speed-dreams/lib/ 2>/dev/null || true
-
-              # Automatisch ein passendes Start-Skript (.sh) generieren
-              cat << 'EOF' > /workspace/dist/ports/speed-dreams.sh
-              #!/bin/bash
-              XDG_DATA_HOME=\${XDG_DATA_HOME:-\$HOME/.local/share}
-              PORT_DIR="\$(dirname "\$0")/speed-dreams"
-              cd "\$PORT_DIR"
-
-              # Lokale Bibliotheken priorisieren, damit libGLU gefunden wird
-              export LD_LIBRARY_PATH="\$PORT_DIR/lib:\$LD_LIBRARY_PATH"
-
-              # Spiel-Binary ausführen (Pfad ggf. anpassen, falls das Binary woanders liegt)
-              ./speed-dreams
-              EOF
-              chmod +x /workspace/dist/ports/speed-dreams.sh
           "
 
       - name: Upload Compiled Binaries Artifact
